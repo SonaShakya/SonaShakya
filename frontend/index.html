@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Task Manager</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 500px; margin: 0 auto; }
+        .card { background: white; border-radius: 15px; padding: 25px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1, h2, h3 { color: #333; margin-bottom: 15px; }
+        input, select, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+        button { background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; margin: 5px; }
+        button:hover { background: #5a67d8; transform: translateY(-2px); transition: 0.2s; }
+        .btn-danger { background: #e53e3e; }
+        .btn-success { background: #48bb78; }
+        .task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
+        .task-card { background: #f7fafc; border-left: 4px solid #667eea; padding: 15px; border-radius: 10px; margin-bottom: 10px; }
+        .task-card.completed { border-left-color: #48bb78; background: #f0fff4; }
+        .task-card.overdue { border-left-color: #e53e3e; background: #fff5f5; }
+        .flex { display: flex; gap: 10px; flex-wrap: wrap; }
+        .nav { background: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; margin: 5px; }
+        .badge-pending { background: #fef5e7; color: #f39c12; }
+        .badge-completed { background: #e8f8f5; color: #27ae60; }
+        .hidden { display: none; }
+        .tabs { display: flex; margin-bottom: 20px; }
+        .tab-button { flex: 1; padding: 10px; border: none; background: #f0f0f0; cursor: pointer; border-radius: 8px 8px 0 0; font-weight: 600; }
+        .tab-button.active { background: #667eea; color: white; }
+        .tab-content { padding: 10px 0; }
+        @media (max-width: 768px) { 
+            .task-grid { grid-template-columns: 1fr; }
+            .container { padding: 10px; }
+            .card { padding: 15px; }
+            .tabs { flex-direction: column; }
+            .tab-button { border-radius: 0; margin-bottom: 5px; }
+            input, select { font-size: 16px; }
+            .nav { flex-direction: column; gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Auth Section -->
+    <div id="authSection" class="card">
+        <h1>📋 Team Task Manager</h1>
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('login')">Login</button>
+            <button class="tab-button" onclick="showTab('signup')">Signup</button>
+        </div>
+        <div id="loginForm" class="tab-content">
+            <input type="email" id="loginEmail" placeholder="Email">
+            <input type="password" id="loginPassword" placeholder="Password">
+            <button onclick="login()">Login</button>
+        </div>
+        <div id="signupForm" class="tab-content hidden">
+            <input type="text" id="signupName" placeholder="Full Name">
+            <input type="email" id="signupEmail" placeholder="Email">
+            <input type="password" id="signupPassword" placeholder="Password">
+            <select id="signupRole">
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+            </select>
+            <button onclick="signup()">Signup</button>
+        </div>
+    </div>
+
+
+    <!-- Main App Section -->
+    <div id="appSection" class="hidden">
+        <div class="nav">
+            <div><strong>Welcome, <span id="userName"></span> (<span id="userRole"></span>)</strong></div>
+            <button onclick="showSection('projects')">📁 Projects</button>
+            <button onclick="showSection('tasks')">✅ Tasks</button>
+            <button onclick="showSection('newTask')">➕ New Task</button>
+            <button onclick="showSection('newProject')">🚀 New Project</button>
+            <button onclick="logout()" class="btn-danger">🚪 Logout</button>
+        </div>
+
+        <!-- Projects Section -->
+        <div id="projectsSection" class="section hidden">
+            <div class="card">
+                <h2>Your Projects</h2>
+                <div id="projectsList"></div>
+            </div>
+            <div class="card" id="addMemberCard" class="hidden">
+                <h3>Add Member to Project</h3>
+                <input type="email" id="memberEmail" placeholder="Member Email">
+                <input type="hidden" id="selectedProjectId">
+                <button onclick="addMember()">Add Member</button>
+            </div>
+        </div>
+
+        <!-- Tasks Section -->
+        <div id="tasksSection" class="section hidden">
+            <div class="card">
+                <h2>📊 Dashboard</h2>
+                <div id="taskStats" class="flex" style="margin-bottom:20px"></div>
+                <div id="tasksList" class="task-grid"></div>
+            </div>
+        </div>
+
+        <!-- New Task Form -->
+        <div id="newTaskSection" class="section hidden">
+            <div class="card">
+                <h2>Create New Task</h2>
+                <input type="text" id="taskTitle" placeholder="Task Title" required>
+                <textarea id="taskDesc" placeholder="Description"></textarea>
+                <select id="taskProject"></select>
+                <select id="taskAssignee"></select>
+                <input type="date" id="taskDueDate">
+                <button onclick="createTask()">Create Task</button>
+            </div>
+        </div>
+
+        <!-- New Project Form -->
+        <div id="newProjectSection" class="section hidden">
+            <div class="card">
+                <h2>Create New Project</h2>
+                <input type="text" id="projectName" placeholder="Project Name" required>
+                <textarea id="projectDesc" placeholder="Description"></textarea>
+                <button onclick="createProject()">Create Project</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let token = null;
+    let currentUser = null;
+    let projects = [];
+    let tasks = [];
+    let users = [];
+
+    const API = 'http://localhost:5000/api';
+
+    // Auth Functions
+    async function signup() {
+        const name = document.getElementById('signupName').value;
+        const email = document.getElementById('signupEmail').value;
+        const password = document.getElementById('signupPassword').value;
+        const role = document.getElementById('signupRole').value;
+
+        const res = await fetch(`${API}/auth/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password, role })
+        });
+        if (res.ok) {
+            alert('Signup successful! Please login.');
+            showTab('login'); // Switch to login tab after successful signup
+        } else {
+            const error = await res.json();
+            alert('Signup failed: ' + (error.error || 'Unknown error'));
+        }
+    }
+
+    async function login() {
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+
+        const res = await fetch(`${API}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            token = data.token;
+            currentUser = data.user;
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            showApp();
+            loadData();
+        } else {
+            alert('Login failed');
+        }
+    }
+
+    function logout() {
+        localStorage.clear();
+        token = null;
+        currentUser = null;
+        document.getElementById('authSection').classList.remove('hidden');
+        document.getElementById('appSection').classList.add('hidden');
+    }
+
+    function showApp() {
+        document.getElementById('authSection').classList.add('hidden');
+        document.getElementById('appSection').classList.remove('hidden');
+        document.getElementById('userName').innerText = currentUser.name;
+        document.getElementById('userRole').innerText = currentUser.role;
+    }
+
+    function showTab(tab) {
+        document.getElementById('loginForm').classList.add('hidden');
+        document.getElementById('signupForm').classList.add('hidden');
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        if (tab === 'login') {
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.querySelector('button[onclick="showTab(\'login\')"]').classList.add('active');
+        } else {
+            document.getElementById('signupForm').classList.remove('hidden');
+            document.querySelector('button[onclick="showTab(\'signup\')"]').classList.add('active');
+        }
+    }
+
+    // Data Loading
+    async function loadData() {
+        await loadProjects();
+        await loadTasks();
+        await loadUsers();
+    }
+
+    async function loadProjects() {
+        const res = await fetch(`${API}/projects`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        projects = await res.json();
+        displayProjects();
+        populateProjectSelects();
+    }
+
+    async function loadTasks() {
+        const res = await fetch(`${API}/tasks`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        tasks = await res.json();
+        displayTasks();
+        updateStats();
+    }
+
+    async function loadUsers() {
+        // Simplified - in real app, get users from projects
+        const res = await fetch(`${API}/projects`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const userProjects = await res.json();
+        const allMembers = new Set();
+        userProjects.forEach(p => {
+            p.members.forEach(m => allMembers.add(JSON.stringify({ id: m._id, name: m.name, email: m.email })));
+        });
+        users = Array.from(allMembers).map(m => JSON.parse(m));
+        populateAssigneeSelect();
+    }
+
+    // Display Functions
+    function displayProjects() {
+        const container = document.getElementById('projectsList');
+        container.innerHTML = projects.map(p => `
+            <div class="task-card">
+                <h3>📁 ${p.name}</h3>
+                <p>${p.description || 'No description'}</p>
+                <p><strong>Admin:</strong> ${p.adminId?.name || 'Unknown'}</p>
+                <p><strong>Members:</strong> ${p.members?.map(m => m.name).join(', ') || 'None'}</p>
+                ${currentUser.role === 'admin' ? `<button onclick="showAddMember('${p._id}')">➕ Add Member</button>` : ''}
+            </div>
+        `).join('');
+    }
+
+    function displayTasks() {
+        const container = document.getElementById('tasksList');
+        const today = new Date();
+        
+        container.innerHTML = tasks.map(task => {
+            const isOverdue = task.dueDate && new Date(task.dueDate) < today && task.status !== 'completed';
+            const statusClass = task.status === 'completed' ? 'completed' : (isOverdue ? 'overdue' : '');
+            
+            return `
+                <div class="task-card ${statusClass}">
+                    <h3>${task.title}</h3>
+                    <p>${task.description || 'No description'}</p>
+                    <p>📌 Project: ${task.projectId?.name || 'Unknown'}</p>
+                    <p>👤 Assigned to: ${task.assignedTo?.name || 'Unassigned'}</p>
+                    <p>📅 Due: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No date'}</p>
+                    <div>
+                        <span class="badge badge-${task.status === 'completed' ? 'completed' : 'pending'}">${task.status}</span>
+                        ${isOverdue ? '<span class="badge" style="background:#e53e3e;color:white;">⚠️ Overdue</span>' : ''}
+                    </div>
+                    ${(currentUser.role === 'admin' || task.assignedTo?._id === currentUser.id) && task.status !== 'completed' ? 
+                        `<button onclick="updateTaskStatus('${task._id}', 'completed')" class="btn-success">✅ Complete</button>` : ''}
+                </div>
+            `;
+        }).join('');
+    }
+
+    function updateStats() {
+        const total = tasks.length;
+        const completed = tasks.filter(t => t.status === 'completed').length;
+        const pending = total - completed;
+        const overdue = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed').length;
+        
+        document.getElementById('taskStats').innerHTML = `
+            <div class="task-card" style="flex:1;text-align:center">
+                <h3>📊 Total Tasks</h3>
+                <h2>${total}</h2>
+            </div>
+            <div class="task-card" style="flex:1;text-align:center">
+                <h3>✅ Completed</h3>
+                <h2>${completed}</h2>
+            </div>
+            <div class="task-card" style="flex:1;text-align:center">
+                <h3>⏳ Pending</h3>
+                <h2>${pending}</h2>
+            </div>
+            <div class="task-card" style="flex:1;text-align:center;border-left-color:#e53e3e">
+                <h3>⚠️ Overdue</h3>
+                <h2>${overdue}</h2>
+            </div>
+        `;
+    }
+
+    function populateProjectSelects() {
+        const select = document.getElementById('taskProject');
+        select.innerHTML = '<option value="">Select Project</option>' + 
+            projects.map(p => `<option value="${p._id}">${p.name}</option>`).join('');
+    }
+
+    function populateAssigneeSelect() {
+        const select = document.getElementById('taskAssignee');
+        select.innerHTML = '<option value="">Select Assignee</option>' + 
+            users.map(u => `<option value="${u.id}">${u.name} (${u.email})</option>`).join('');
+    }
+
+    // CRUD Operations
+    async function createProject() {
+        const name = document.getElementById('projectName').value;
+        const description = document.getElementById('projectDesc').value;
+        
+        const res = await fetch(`${API}/projects`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ name, description })
+        });
+        
+        if (res.ok) {
+            alert('Project created!');
+            loadProjects();
+            showSection('projects');
+        } else alert('Failed');
+    }
+
+    async function createTask() {
+        const title = document.getElementById('taskTitle').value;
+        const description = document.getElementById('taskDesc').value;
+        const projectId = document.getElementById('taskProject').value;
+        const assignedTo = document.getElementById('taskAssignee').value;
+        const dueDate = document.getElementById('taskDueDate').value;
+        
+        if (!title || !projectId || !assignedTo) {
+            alert('Title, project, and assignee required');
+            return;
+        }
+        
+        const res = await fetch(`${API}/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ title, description, projectId, assignedTo, dueDate })
+        });
+        
+        if (res.ok) {
+            alert('Task created!');
+            loadTasks();
+            showSection('tasks');
+        } else alert('Failed');
+    }
+
+    async function updateTaskStatus(taskId, status) {
+        const res = await fetch(`${API}/tasks/${taskId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ status })
+        });
+        
+        if (res.ok) {
+            loadTasks();
+        } else alert('Failed');
+    }
+
+    async function addMember() {
+        const email = document.getElementById('memberEmail').value;
+        const projectId = document.getElementById('selectedProjectId').value;
+        
+        const res = await fetch(`${API}/projects/${projectId}/members`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ email })
+        });
+        
+        if (res.ok) {
+            alert('Member added!');
+            loadProjects();
+        } else alert('User not found');
+    }
+
+    function showAddMember(projectId) {
+        document.getElementById('selectedProjectId').value = projectId;
+        document.getElementById('addMemberCard').classList.remove('hidden');
+    }
+
+    function showSection(section) {
+        document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+        document.getElementById(`${section}Section`).classList.remove('hidden');
+        if (section === 'tasks') loadTasks();
+        if (section === 'projects') loadProjects();
+    }
+
+    // Initialize
+    const savedToken = localStorage.getItem('token');
+    const savedUser = localStorage.getItem('user');
+    if (savedToken && savedUser) {
+        token = savedToken;
+        currentUser = JSON.parse(savedUser);
+        showApp();
+        loadData();
+    }
+</script>
+</body>
+</html>
