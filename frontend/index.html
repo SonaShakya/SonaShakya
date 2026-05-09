@@ -128,61 +128,78 @@
 </div>
 
 <script>
-    let token = null;
     let currentUser = null;
     let projects = [];
     let tasks = [];
     let users = [];
+    const STORAGE_KEY = 'task-manager-state';
 
-    const API = 'http://localhost:5000/api';
-
-    // Auth Functions
-    async function signup() {
-        const name = document.getElementById('signupName').value;
-        const email = document.getElementById('signupEmail').value;
-        const password = document.getElementById('signupPassword').value;
-        const role = document.getElementById('signupRole').value;
-
-        const res = await fetch(`${API}/auth/signup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, email, password, role })
-        });
-        if (res.ok) {
-            alert('Signup successful! Please login.');
-            showTab('login'); // Switch to login tab after successful signup
-        } else {
-            const error = await res.json();
-            alert('Signup failed: ' + (error.error || 'Unknown error'));
-        }
+    function generateId() {
+        return 'id-' + Math.random().toString(36).slice(2, 11);
     }
 
-    async function login() {
-        const email = document.getElementById('loginEmail').value;
-        const password = document.getElementById('loginPassword').value;
-
-        const res = await fetch(`${API}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
-        
-        if (res.ok) {
-            const data = await res.json();
-            token = data.token;
-            currentUser = data.user;
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(currentUser));
-            showApp();
-            loadData();
-        } else {
-            alert('Login failed');
+    function loadState() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (!stored) {
+            const initialState = {
+                users: [],
+                projects: [],
+                tasks: []
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(initialState));
+            return initialState;
         }
+        return JSON.parse(stored);
+    }
+
+    function saveState(state) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    const state = loadState();
+
+    function signup() {
+        const name = document.getElementById('signupName').value.trim();
+        const email = document.getElementById('signupEmail').value.trim();
+        const password = document.getElementById('signupPassword').value.trim();
+        const role = document.getElementById('signupRole').value;
+
+        if (!name || !email || !password) {
+            alert('Please fill in all signup fields.');
+            return;
+        }
+
+        if (state.users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+            alert('Email is already registered.');
+            return;
+        }
+
+        const user = { id: generateId(), name, email, password, role };
+        state.users.push(user);
+        saveState(state);
+
+        alert('Signup successful! Please login.');
+        showTab('login');
+    }
+
+    function login() {
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value.trim();
+
+        const user = state.users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+        if (!user) {
+            alert('Invalid credentials or no account found. Please sign up first.');
+            return;
+        }
+
+        currentUser = { id: user.id, name: user.name, email: user.email, role: user.role };
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        showApp();
+        loadData();
     }
 
     function logout() {
-        localStorage.clear();
-        token = null;
+        localStorage.removeItem('currentUser');
         currentUser = null;
         document.getElementById('authSection').classList.remove('hidden');
         document.getElementById('appSection').classList.add('hidden');
@@ -208,55 +225,55 @@
         }
     }
 
-    // Data Loading
-    async function loadData() {
-        await loadProjects();
-        await loadTasks();
-        await loadUsers();
+    function loadData() {
+        loadProjects();
+        loadTasks();
+        loadUsers();
     }
 
-    async function loadProjects() {
-        const res = await fetch(`${API}/projects`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        projects = await res.json();
+    function loadProjects() {
+        projects = state.projects.filter(p => p.members.includes(currentUser.id));
         displayProjects();
         populateProjectSelects();
     }
 
-    async function loadTasks() {
-        const res = await fetch(`${API}/tasks`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        tasks = await res.json();
+    function loadTasks() {
+        tasks = currentUser.role === 'admin'
+            ? state.tasks.map(task => enrichTask(task))
+            : state.tasks
+                .filter(task => task.assignedTo === currentUser.id)
+                .map(task => enrichTask(task));
         displayTasks();
         updateStats();
     }
 
-    async function loadUsers() {
-        // Simplified - in real app, get users from projects
-        const res = await fetch(`${API}/projects`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const userProjects = await res.json();
-        const allMembers = new Set();
-        userProjects.forEach(p => {
-            p.members.forEach(m => allMembers.add(JSON.stringify({ id: m._id, name: m.name, email: m.email })));
-        });
-        users = Array.from(allMembers).map(m => JSON.parse(m));
+    function loadUsers() {
+        users = state.users.map(u => ({ id: u.id, name: u.name, email: u.email }));
         populateAssigneeSelect();
     }
 
-    // Display Functions
+    function enrichTask(task) {
+        return {
+            ...task,
+            projectId: state.projects.find(p => p.id === task.projectId) || { name: 'Unknown' },
+            assignedTo: state.users.find(u => u.id === task.assignedTo) || { name: 'Unassigned', id: task.assignedTo }
+        };
+    }
+
     function displayProjects() {
         const container = document.getElementById('projectsList');
+        if (!projects.length) {
+            container.innerHTML = '<p>No projects yet. Create one to get started.</p>';
+            return;
+        }
+
         container.innerHTML = projects.map(p => `
             <div class="task-card">
                 <h3>📁 ${p.name}</h3>
                 <p>${p.description || 'No description'}</p>
-                <p><strong>Admin:</strong> ${p.adminId?.name || 'Unknown'}</p>
-                <p><strong>Members:</strong> ${p.members?.map(m => m.name).join(', ') || 'None'}</p>
-                ${currentUser.role === 'admin' ? `<button onclick="showAddMember('${p._id}')">➕ Add Member</button>` : ''}
+                <p><strong>Admin:</strong> ${state.users.find(u => u.id === p.adminId)?.name || 'Unknown'}</p>
+                <p><strong>Members:</strong> ${p.members.map(id => state.users.find(u => u.id === id)?.name || 'Unknown').join(', ')}</p>
+                ${currentUser.role === 'admin' ? `<button onclick="showAddMember('${p.id}')">➕ Add Member</button>` : ''}
             </div>
         `).join('');
     }
@@ -264,24 +281,27 @@
     function displayTasks() {
         const container = document.getElementById('tasksList');
         const today = new Date();
-        
+        if (!tasks.length) {
+            container.innerHTML = '<p>No tasks yet. Create a task to begin.</p>';
+            return;
+        }
+
         container.innerHTML = tasks.map(task => {
             const isOverdue = task.dueDate && new Date(task.dueDate) < today && task.status !== 'completed';
             const statusClass = task.status === 'completed' ? 'completed' : (isOverdue ? 'overdue' : '');
-            
+
             return `
                 <div class="task-card ${statusClass}">
                     <h3>${task.title}</h3>
                     <p>${task.description || 'No description'}</p>
-                    <p>📌 Project: ${task.projectId?.name || 'Unknown'}</p>
-                    <p>👤 Assigned to: ${task.assignedTo?.name || 'Unassigned'}</p>
+                    <p>📌 Project: ${task.projectId.name}</p>
+                    <p>👤 Assigned to: ${task.assignedTo.name}</p>
                     <p>📅 Due: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No date'}</p>
                     <div>
                         <span class="badge badge-${task.status === 'completed' ? 'completed' : 'pending'}">${task.status}</span>
                         ${isOverdue ? '<span class="badge" style="background:#e53e3e;color:white;">⚠️ Overdue</span>' : ''}
                     </div>
-                    ${(currentUser.role === 'admin' || task.assignedTo?._id === currentUser.id) && task.status !== 'completed' ? 
-                        `<button onclick="updateTaskStatus('${task._id}', 'completed')" class="btn-success">✅ Complete</button>` : ''}
+                    ${task.status !== 'completed' ? `<button onclick="updateTaskStatus('${task.id}', 'completed')" class="btn-success">✅ Complete</button>` : ''}
                 </div>
             `;
         }).join('');
@@ -292,7 +312,7 @@
         const completed = tasks.filter(t => t.status === 'completed').length;
         const pending = total - completed;
         const overdue = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed').length;
-        
+
         document.getElementById('taskStats').innerHTML = `
             <div class="task-card" style="flex:1;text-align:center">
                 <h3>📊 Total Tasks</h3>
@@ -315,85 +335,106 @@
 
     function populateProjectSelects() {
         const select = document.getElementById('taskProject');
-        select.innerHTML = '<option value="">Select Project</option>' + 
-            projects.map(p => `<option value="${p._id}">${p.name}</option>`).join('');
+        select.innerHTML = '<option value="">Select Project</option>' +
+            projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
     }
 
     function populateAssigneeSelect() {
         const select = document.getElementById('taskAssignee');
-        select.innerHTML = '<option value="">Select Assignee</option>' + 
+        select.innerHTML = '<option value="">Select Assignee</option>' +
             users.map(u => `<option value="${u.id}">${u.name} (${u.email})</option>`).join('');
     }
 
-    // CRUD Operations
-    async function createProject() {
-        const name = document.getElementById('projectName').value;
-        const description = document.getElementById('projectDesc').value;
-        
-        const res = await fetch(`${API}/projects`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ name, description })
+    function createProject() {
+        const name = document.getElementById('projectName').value.trim();
+        const description = document.getElementById('projectDesc').value.trim();
+
+        if (!name) {
+            alert('Project name is required.');
+            return;
+        }
+
+        state.projects.push({
+            id: generateId(),
+            name,
+            description,
+            adminId: currentUser.id,
+            members: [currentUser.id],
+            createdAt: new Date().toISOString()
         });
-        
-        if (res.ok) {
-            alert('Project created!');
-            loadProjects();
-            showSection('projects');
-        } else alert('Failed');
+        saveState(state);
+        document.getElementById('projectName').value = '';
+        document.getElementById('projectDesc').value = '';
+        alert('Project created!');
+        loadProjects();
+        showSection('projects');
     }
 
-    async function createTask() {
-        const title = document.getElementById('taskTitle').value;
-        const description = document.getElementById('taskDesc').value;
+    function createTask() {
+        const title = document.getElementById('taskTitle').value.trim();
+        const description = document.getElementById('taskDesc').value.trim();
         const projectId = document.getElementById('taskProject').value;
         const assignedTo = document.getElementById('taskAssignee').value;
         const dueDate = document.getElementById('taskDueDate').value;
-        
+
         if (!title || !projectId || !assignedTo) {
             alert('Title, project, and assignee required');
             return;
         }
-        
-        const res = await fetch(`${API}/tasks`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ title, description, projectId, assignedTo, dueDate })
+
+        state.tasks.push({
+            id: generateId(),
+            title,
+            description,
+            projectId,
+            assignedTo,
+            assignedBy: currentUser.id,
+            status: 'pending',
+            dueDate,
+            createdAt: new Date().toISOString()
         });
-        
-        if (res.ok) {
-            alert('Task created!');
-            loadTasks();
-            showSection('tasks');
-        } else alert('Failed');
+        saveState(state);
+        document.getElementById('taskTitle').value = '';
+        document.getElementById('taskDesc').value = '';
+        document.getElementById('taskDueDate').value = '';
+        alert('Task created!');
+        loadTasks();
+        showSection('tasks');
     }
 
-    async function updateTaskStatus(taskId, status) {
-        const res = await fetch(`${API}/tasks/${taskId}/status`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ status })
-        });
-        
-        if (res.ok) {
-            loadTasks();
-        } else alert('Failed');
+    function updateTaskStatus(taskId, status) {
+        const task = state.tasks.find(t => t.id === taskId);
+        if (!task) return;
+        task.status = status;
+        saveState(state);
+        loadTasks();
     }
 
-    async function addMember() {
-        const email = document.getElementById('memberEmail').value;
+    function addMember() {
+        const email = document.getElementById('memberEmail').value.trim();
         const projectId = document.getElementById('selectedProjectId').value;
-        
-        const res = await fetch(`${API}/projects/${projectId}/members`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ email })
-        });
-        
-        if (res.ok) {
-            alert('Member added!');
-            loadProjects();
-        } else alert('User not found');
+
+        if (!email) {
+            alert('Please enter a member email.');
+            return;
+        }
+
+        const user = state.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        if (!user) {
+            alert('User not found. Please ask them to sign up first.');
+            return;
+        }
+
+        const project = state.projects.find(p => p.id === projectId);
+        if (!project) return;
+        if (!project.members.includes(user.id)) {
+            project.members.push(user.id);
+            saveState(state);
+        }
+
+        document.getElementById('memberEmail').value = '';
+        alert('Member added!');
+        loadProjects();
     }
 
     function showAddMember(projectId) {
@@ -408,15 +449,16 @@
         if (section === 'projects') loadProjects();
     }
 
-    // Initialize
-    const savedToken = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
-    if (savedToken && savedUser) {
-        token = savedToken;
-        currentUser = JSON.parse(savedUser);
-        showApp();
-        loadData();
+    function initApp() {
+        const savedUser = localStorage.getItem('currentUser');
+        if (savedUser) {
+            currentUser = JSON.parse(savedUser);
+            showApp();
+            loadData();
+        }
     }
+
+    initApp();
 </script>
 </body>
 </html>
